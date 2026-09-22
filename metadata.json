@@ -1,0 +1,7 @@
+{
+  "name": "Music Monster Academy",
+  "description": "Media pembelajaran interaktif seni musik gaya Pokémon RPG dengan sistem split-screen 1P, 2P, dan 4P serta bank 60 soal lengkap.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
