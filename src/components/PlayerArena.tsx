@@ -308,6 +308,8 @@ export const PlayerArena: React.FC<PlayerArenaProps> = ({
         selectedOption={player.selectedOption}
         isOpen={player.showExplanation}
         isTimeUp={player.isTimeUp}
+        displayQNum={displayQNum}
+        isLastQuestion={displayQNum >= 15 || currentQIndex >= questions.length - 1}
         onNext={() => onNextQuestion(player.id)}
       />
     </div>

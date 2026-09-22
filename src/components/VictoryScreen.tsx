@@ -31,9 +31,18 @@ export const VictoryScreen: React.FC<VictoryScreenProps> = ({
   onReturnToMenu
 }) => {
   const isSolo = players.length === 1;
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+  // Multi-tier sorting: 1. Score, 2. Correct answers, 3. Remaining time
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const aCorrect = a.history.filter(h => h.isCorrect).length;
+    const bCorrect = b.history.filter(h => h.isCorrect).length;
+    if (bCorrect !== aCorrect) return bCorrect - aCorrect;
+    return b.timeLeft - a.timeLeft;
+  });
   const topPlayer = sortedPlayers[0];
-  const isTie = sortedPlayers.length > 1 && sortedPlayers[0].score === sortedPlayers[1].score;
+  const runnerUp = sortedPlayers.length > 1 ? sortedPlayers[1] : null;
+  const isTie = runnerUp !== null && topPlayer.score === runnerUp.score && 
+    topPlayer.history.filter(h => h.isCorrect).length === runnerUp.history.filter(h => h.isCorrect).length;
 
   // Solo mode win condition: score >= 800 (>= 8/15 correct) or monster HP <= 100
   const isSoloWon = isSolo && (topPlayer.score >= 800 || topPlayer.monsterHp <= 100);
@@ -158,45 +167,57 @@ export const VictoryScreen: React.FC<VictoryScreenProps> = ({
         ) : (
           /* ---------- DUEL / SQUAD MODE VIEW ---------- */
           <div className="space-y-4">
-            {/* Top Winner Card (Celebration) */}
-            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-100 via-yellow-50 to-amber-100 border-3 border-amber-400 rounded-2xl shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Top Winner Card (Full Triumphant Celebration) */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border-4 border-amber-400 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
+              {/* Sparkle Badges */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 opacity-75">
+                <span className="text-lg animate-spin">✨</span>
+                <span className="text-lg animate-bounce">👑</span>
+                <span className="text-lg animate-spin">✨</span>
+              </div>
+
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-amber-200/60 border-4 border-amber-400 flex items-center justify-center shadow-inner">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-amber-300 to-yellow-100 border-4 border-amber-500 flex items-center justify-center shadow-lg ring-4 ring-amber-300/60">
                     <CuteCharacter characterId={topChar.id} pose="celebrate" size="lg" />
+                  </div>
+                  <div className="absolute -top-2 -right-1 w-8 h-8 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center shadow-md animate-bounce">
+                    <Crown className="w-4 h-4 text-slate-950" />
                   </div>
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full font-pixel text-xs bg-amber-500 text-slate-950 font-bold">
-                      🏆 WINNER
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 rounded-full font-pixel text-xs bg-amber-500 text-slate-950 font-bold shadow-xs flex items-center gap-1 border border-amber-600">
+                      <Crown className="w-3.5 h-3.5 text-slate-950" />
+                      JUARA 1 (WINNER)
                     </span>
-                    <span className="font-pixel text-xs text-sky-900">
+                    <span className="font-pixel text-xs text-sky-950 font-bold">
                       {topPlayer.name}
                     </span>
                   </div>
-                  <h3 className="font-pixel text-lg sm:text-xl text-amber-700 mt-1">
-                    {topChar.name}
+                  <h3 className="font-pixel text-lg sm:text-xl text-amber-900 mt-1 flex items-center gap-2">
+                    <span>{topChar.name}</span>
+                    <span className="text-sm font-sans-clean text-amber-800 font-semibold">({topChar.role})</span>
                   </h3>
-                  <p className="font-sans-clean text-xs text-slate-700 italic max-w-sm">
+                  <div className="mt-1 bg-amber-50/90 p-2 rounded-lg border border-amber-300 text-xs font-sans-clean text-slate-800 italic max-w-md shadow-2xs">
                     "{topChar.quoteWin}"
-                  </p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <span className="font-pixel text-base text-amber-800 font-bold">
+                  </div>
+                  <div className="mt-2 flex items-center gap-3">
+                    <span className="font-pixel text-base sm:text-lg text-amber-900 font-bold">
                       {topPlayer.score} PTS
                     </span>
-                    <span className="text-xs text-slate-500 font-pixel">
-                      ({topPlayer.history.filter(h => h.isCorrect).length}/15 Benar)
+                    <span className="text-xs text-emerald-800 font-pixel bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                      ✓ {topPlayer.history.filter(h => h.isCorrect).length}/15 Benar
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col items-center justify-center bg-white/90 p-3 rounded-xl border border-amber-300 min-w-[130px]">
-                <Trophy className="w-8 h-8 text-amber-500 animate-bounce mb-1" />
-                <span className="font-pixel text-[10px] text-amber-800">MAESTRO DUEL</span>
-                <span className="font-sans-clean text-xs text-slate-600 font-semibold">Tingkat 1</span>
+              <div className="flex flex-col items-center justify-center bg-white/95 p-3.5 rounded-xl border-2 border-amber-400 min-w-[140px] shadow-sm">
+                <Trophy className="w-9 h-9 text-amber-500 animate-bounce mb-1" />
+                <span className="font-pixel text-[10px] text-amber-900 font-bold">MAESTRO UTAMA</span>
+                <span className="font-sans-clean text-xs text-emerald-700 font-bold">Kemenangan Penuh!</span>
               </div>
             </div>
 
@@ -215,22 +236,23 @@ export const VictoryScreen: React.FC<VictoryScreenProps> = ({
                   return (
                     <div
                       key={loser.id}
-                      className="p-3 bg-white/90 rounded-xl border-2 border-sky-200 hover:border-pink-300 transition-all flex flex-col justify-between shadow-xs"
+                      className="p-3.5 bg-white/95 rounded-2xl border-3 border-sky-200 hover:border-pink-300 transition-all flex flex-col justify-between shadow-sm"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 rounded-full bg-sky-50 border-2 border-sky-200 flex items-center justify-center flex-shrink-0">
+                        <div className="w-16 h-16 rounded-full bg-sky-50 border-2 border-sky-300 flex items-center justify-center flex-shrink-0 relative">
                           <CuteCharacter characterId={loserChar.id} pose="sad" size="sm" />
+                          <span className="absolute -bottom-1 -right-1 text-xs">💧</span>
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-pixel text-[10px] text-slate-500">
+                            <span className="font-pixel text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">
                               #{idx + 2}
                             </span>
-                            <span className="font-pixel text-xs text-slate-800 truncate">
+                            <span className="font-pixel text-xs text-slate-800 truncate font-bold">
                               {loser.name}
                             </span>
                           </div>
-                          <p className="font-sans-clean text-[11px] font-semibold text-sky-700 truncate">
+                          <p className="font-sans-clean text-[11px] font-semibold text-sky-700 truncate mt-0.5">
                             {loserChar.name}
                           </p>
                           <p className="font-pixel text-xs text-amber-600 mt-0.5">
@@ -240,16 +262,22 @@ export const VictoryScreen: React.FC<VictoryScreenProps> = ({
                       </div>
 
                       {/* Comical Sad Reaction & Motivational Pep Talk */}
-                      <div className="mt-2.5 p-2 bg-pink-50/80 rounded-lg border border-pink-200 text-[11px] font-sans-clean text-slate-700">
-                        <p className="text-pink-700 font-semibold flex items-center gap-1 mb-0.5">
-                          <span>😢</span> <em>"Hiks, kalah tipis!"</em>
+                      <div className="mt-3 p-2.5 bg-gradient-to-r from-pink-50 to-amber-50 rounded-xl border-2 border-pink-200 text-xs font-sans-clean text-slate-700 shadow-xs">
+                        <div className="flex items-center gap-1.5 text-pink-700 font-bold mb-1">
+                          <span className="text-base animate-pulse">😭</span>
+                          <span className="font-pixel text-[10px]">HIKS, KALAH SKOR TIPIS!</span>
+                        </div>
+                        <p className="text-slate-700 italic bg-white/80 p-1.5 rounded-lg border border-pink-100 text-[11px] leading-snug mb-2">
+                          "{loserChar.quoteLose || 'Aduh, tempo seranganku tadi kurang tepat!'}"
                         </p>
-                        <p className="text-slate-600 leading-snug">
-                          {loserChar.quoteLose}
-                        </p>
-                        <p className="text-emerald-700 font-semibold mt-1 text-[10px] font-pixel">
-                          💡 Tetap semangat & latihan lagi!
-                        </p>
+                        <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-900 text-[11px] leading-snug">
+                          <p className="font-pixel text-[10px] text-emerald-700 font-bold flex items-center gap-1 mb-0.5">
+                            <span>💡</span> SEMANGAT BELAJAR:
+                          </p>
+                          <p>
+                            Kamu sudah hebat menjawab <strong>{correctCount}/15 soal benar</strong>! Jangan berkecil hati yaa, ulas materi di Slide dan tantang ulang untuk jadi juara berikutnya!
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );

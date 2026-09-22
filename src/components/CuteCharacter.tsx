@@ -25,11 +25,11 @@ export const CuteCharacter: React.FC<CuteCharacterProps> = ({
   const getPoseAnimation = () => {
     switch (pose) {
       case 'celebrate':
-        return 'animate-bounce';
+        return 'animate-celebrate-jump';
       case 'waiting':
-        return 'animate-pulse';
+        return 'animate-waiting-sway';
       case 'sad':
-        return 'animate-shake';
+        return 'animate-sad-wobble';
       case 'idle':
       default:
         return 'animate-trainer-bounce';

@@ -128,9 +128,13 @@ export default function App() {
     return shuffled;
   }, [selectedRegionId, shuffleQuestions, isGameStarted]);
 
-  // Players configuration based on GameMode
-  const initialPlayers = useMemo((): PlayerState[] => {
-    const count = mode === 'solo' ? 1 : mode === 'duel' ? 2 : 4;
+  // Pure helper to generate clean, un-finished player state for matches
+  const createFreshPlayers = (
+    currentMode: GameMode,
+    currentChars: Record<number, string>,
+    currentTimeLimit: number
+  ): PlayerState[] => {
+    const count = currentMode === 'solo' ? 1 : currentMode === 'duel' ? 2 : 4;
     const configs = [
       { id: 1, name: 'Player 1', colorName: 'bg-blue-600' },
       { id: 2, name: 'Player 2', colorName: 'bg-rose-600' },
@@ -142,13 +146,13 @@ export default function App() {
       id: cfg.id,
       name: cfg.name,
       colorName: cfg.colorName,
-      characterId: playerCharacters[cfg.id] || 'mimi',
+      characterId: currentChars[cfg.id] || 'mimi',
       score: 0,
       monsterHp: 300,
       maxMonsterHp: 300,
       currentQIndex: 0,
-      timeLeft: timeLimit,
-      maxTimePerQuestion: timeLimit,
+      timeLeft: currentTimeLimit,
+      maxTimePerQuestion: currentTimeLimit,
       isLocked: false,
       selectedOption: null,
       lastSelectedCorrect: null,
@@ -160,7 +164,12 @@ export default function App() {
       showSlash: false,
       history: [],
     }));
-  }, [mode, isGameStarted, timeLimit, playerCharacters]);
+  };
+
+  // Players configuration based on GameMode
+  const initialPlayers = useMemo((): PlayerState[] => {
+    return createFreshPlayers(mode, playerCharacters, timeLimit);
+  }, [mode, timeLimit, playerCharacters]);
 
   const [players, setPlayers] = useState<PlayerState[]>(initialPlayers);
 
@@ -248,12 +257,14 @@ export default function App() {
     }
 
     if (isCorrect) {
-      // Correct Answer: +100 pts, -20 HP, animation
+      // Correct Answer: +100 pts + speed bonus (remaining seconds * 2), -20 HP, animation
+      const speedBonus = Math.max(0, player.timeLeft * 2);
+      const scoreGained = 100 + speedBonus;
       const newHp = Math.max(0, player.monsterHp - 20);
-      const newScore = player.score + 100;
+      const newScore = player.score + scoreGained;
       const updatedHistory = [
         ...player.history,
-        { questionId: currentQ.id, selected: optionId, isCorrect: true, scoreGained: 100 },
+        { questionId: currentQ.id, selected: optionId, isCorrect: true, scoreGained },
       ];
 
       // Update player visual state synchronously
@@ -455,8 +466,28 @@ export default function App() {
   };
 
   const handleStartBattleFromSummary = () => {
+    Object.values(answerTimeoutsRef.current).forEach((t) => clearTimeout(t));
+    answerTimeoutsRef.current = {};
+    setShowVictory(false);
+    setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
     setShowSummaryModal(false);
     setIsGameStarted(true);
+    sound.playBattleIntro();
+    if (!isMuted) {
+      sound.startBattleBgm(selectedRegionId);
+      setIsBgmActive(true);
+    }
+  };
+
+  const handleDirectStartBattle = () => {
+    sound.playSelect();
+    Object.values(answerTimeoutsRef.current).forEach((t) => clearTimeout(t));
+    answerTimeoutsRef.current = {};
+    setShowVictory(false);
+    setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
+    setShowSummaryModal(false);
+    setIsGameStarted(true);
+    sound.playBattleIntro();
     if (!isMuted) {
       sound.startBattleBgm(selectedRegionId);
       setIsBgmActive(true);
@@ -472,7 +503,7 @@ export default function App() {
       setIsBgmActive(true);
     }
     setShowVictory(false);
-    setPlayers(initialPlayers);
+    setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
   };
 
   const handleReturnToMenu = () => {
@@ -482,6 +513,8 @@ export default function App() {
     setIsGameStarted(false);
     sound.stopBattleBgm();
     setIsBgmActive(false);
+    // Reset players so stale isFinished state never triggers premature victory on replay
+    setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
   };
 
   const activeSelectingPlayer = players.find((p) => p.id === selectingCharacterForPlayerId);
@@ -818,7 +851,9 @@ export default function App() {
 
                         {/* Floating Hover Tooltip: Muncul teks lengkap saat mouse hover */}
                         <div
-                          className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-50 absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full w-80 sm:w-96 p-3.5 bg-slate-950/95 text-white rounded-2xl border-2 border-amber-300 shadow-2xl backdrop-blur-md hidden sm:block"
+                          className={`opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 z-50 absolute left-1/2 -translate-x-1/2 w-80 sm:w-96 p-3.5 bg-slate-950/95 text-white rounded-2xl border-2 border-amber-300 shadow-2xl backdrop-blur-md hidden sm:block ${
+                            reg.id <= 2 ? 'top-full mt-2.5' : '-top-2 -translate-y-full'
+                          }`}
                           style={{ filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.6))' }}
                         >
                           <div className="flex items-center justify-between border-b border-white/20 pb-1.5 mb-2">
@@ -846,11 +881,15 @@ export default function App() {
                               <span className="text-sky-100">{theme.musicDescription}</span>
                             </div>
                           </div>
-                          <p className="text-[10px] text-slate-300 italic line-clamp-2">
+                          <p className="text-[10px] text-slate-300 italic">
                             💡 {reg.summary.importantTip}
                           </p>
-                          {/* Tooltip downward indicator */}
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-950" />
+                          {/* Tooltip pointer indicator */}
+                          {reg.id <= 2 ? (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-slate-950" />
+                          ) : (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-950" />
+                          )}
                         </div>
 
                         {/* Monster Sprite */}
@@ -959,14 +998,24 @@ export default function App() {
                 })()}
               </div>
 
-              {/* Direct Quick Launch Button */}
-              <button
-                onClick={() => handleOpenSlidesForRegion(selectedRegionId)}
-                className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 hover:from-emerald-400 hover:to-teal-400 active:scale-98 text-white font-pixel text-sm rounded-2xl border-2 border-white shadow-xl flex items-center justify-center gap-3 cursor-pointer tracking-wider transition-all font-bold"
-              >
-                <BookOpen className="w-5 h-5 text-white" />
-                <span>BUKA SLIDE MATERI & MULAI PERTARUNGAN</span>
-              </button>
+              {/* Direct Quick Launch Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-xl">
+                <button
+                  onClick={handleDirectStartBattle}
+                  className="w-full sm:flex-1 px-6 py-3.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 hover:from-emerald-400 hover:to-teal-400 active:scale-98 text-white font-pixel text-xs sm:text-sm rounded-2xl border-2 border-white shadow-xl flex items-center justify-center gap-2 cursor-pointer tracking-wider transition-all font-bold"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
+                  <span>MULAI PERTARUNGAN ▶</span>
+                </button>
+
+                <button
+                  onClick={() => handleOpenSlidesForRegion(selectedRegionId)}
+                  className="w-full sm:flex-1 px-6 py-3.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 active:scale-98 text-slate-950 font-pixel text-xs sm:text-sm rounded-2xl border-2 border-white shadow-xl flex items-center justify-center gap-2 cursor-pointer tracking-wider transition-all font-bold"
+                >
+                  <BookOpen className="w-4 h-4 text-slate-950" />
+                  <span>SLIDE MATERI PRESENTASI</span>
+                </button>
+              </div>
             </div>
           </div>
         ) : (

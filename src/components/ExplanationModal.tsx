@@ -10,6 +10,8 @@ interface ExplanationModalProps {
   selectedOption: 'A' | 'B' | 'C' | 'D' | 'TIMEOUT' | null;
   isOpen: boolean;
   isTimeUp?: boolean;
+  displayQNum?: number;
+  isLastQuestion?: boolean;
   onNext: () => void;
 }
 
@@ -20,6 +22,8 @@ export const ExplanationModal: React.FC<ExplanationModalProps> = ({
   selectedOption,
   isOpen,
   isTimeUp = false,
+  displayQNum,
+  isLastQuestion,
   onNext
 }) => {
   useEffect(() => {
@@ -35,15 +39,18 @@ export const ExplanationModal: React.FC<ExplanationModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onNext]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !question) return null;
 
   const handleNextClick = () => {
     sound.playSelect();
     onNext();
   };
 
-  const correctOptionObj = question.options.find(o => o.id === question.correct);
-  const selectedOptionObj = question.options.find(o => o.id === selectedOption);
+  const isLast = isLastQuestion ?? (displayQNum ? displayQNum >= 15 : question.questionNumber >= 15);
+  const currentDisplayNum = displayQNum ?? Math.min(question.questionNumber, 15);
+
+  const correctOptionObj = question.options?.find(o => o.id === question.correct);
+  const selectedOptionObj = question.options?.find(o => o.id === selectedOption);
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center p-3 bg-sky-950/60 backdrop-blur-xs animate-in fade-in duration-150 select-none">
@@ -69,7 +76,7 @@ export const ExplanationModal: React.FC<ExplanationModalProps> = ({
             )}
           </div>
           <span className="font-pixel text-[10px] text-sky-700">
-            SOAL #{question.questionNumber}/15 {question.questionNumber >= 15 ? '(TERAKHIR)' : ''}
+            SOAL #{currentDisplayNum}/15 {isLast ? '(TERAKHIR)' : ''}
           </span>
         </div>
 
@@ -131,7 +138,7 @@ export const ExplanationModal: React.FC<ExplanationModalProps> = ({
         </div>
 
         {/* Continue / Finish Button */}
-        {question.questionNumber >= 15 ? (
+        {isLast ? (
           <button
             onClick={handleNextClick}
             className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-pixel text-xs rounded-xl border-2 border-white shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
