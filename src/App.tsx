@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GameMode, PlayerState, RegionId } from './types';
-import { REGIONS_DATA, getQuestionsForRegion } from './data/questionsData';
+import { REGIONS_DATA } from './data/questionsData';
+import { getPreparedQuestions } from './utils/quizUtils';
 import { PlayerArena } from './components/PlayerArena';
 import { SummaryModal } from './components/SummaryModal';
 import { VictoryScreen } from './components/VictoryScreen';
@@ -87,7 +88,9 @@ export default function App() {
   const [showSummaryModal, setShowSummaryModal] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isBgmActive, setIsBgmActive] = useState<boolean>(false);
-  const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(false);
+  const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(true);
+  const [shuffleOptions, setShuffleOptions] = useState<boolean>(true);
+  const [shuffleSeed, setShuffleSeed] = useState<number>(0);
   const [timeLimit, setTimeLimit] = useState<number>(20); // 15, 20, or 30 seconds per question
   const [showVictory, setShowVictory] = useState<boolean>(false);
 
@@ -116,17 +119,10 @@ export default function App() {
     return REGIONS_DATA.find((r) => r.id === selectedRegionId) || REGIONS_DATA[0];
   }, [selectedRegionId]);
 
-  // Questions for current region
+  // Questions for current region with dynamic shuffling of question order, options A/B/C/D, and correct answers
   const regionQuestions = useMemo(() => {
-    const raw = getQuestionsForRegion(selectedRegionId);
-    if (!shuffleQuestions) return raw;
-    const shuffled = [...raw];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }, [selectedRegionId, shuffleQuestions, isGameStarted]);
+    return getPreparedQuestions(selectedRegionId, shuffleQuestions, shuffleOptions);
+  }, [selectedRegionId, shuffleQuestions, shuffleOptions, shuffleSeed]);
 
   // Pure helper to generate clean, un-finished player state for matches
   const createFreshPlayers = (
@@ -469,6 +465,7 @@ export default function App() {
     Object.values(answerTimeoutsRef.current).forEach((t) => clearTimeout(t));
     answerTimeoutsRef.current = {};
     setShowVictory(false);
+    setShuffleSeed((s) => s + 1);
     setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
     setShowSummaryModal(false);
     setIsGameStarted(true);
@@ -484,6 +481,7 @@ export default function App() {
     Object.values(answerTimeoutsRef.current).forEach((t) => clearTimeout(t));
     answerTimeoutsRef.current = {};
     setShowVictory(false);
+    setShuffleSeed((s) => s + 1);
     setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
     setShowSummaryModal(false);
     setIsGameStarted(true);
@@ -503,6 +501,7 @@ export default function App() {
       setIsBgmActive(true);
     }
     setShowVictory(false);
+    setShuffleSeed((s) => s + 1);
     setPlayers(createFreshPlayers(mode, playerCharacters, timeLimit));
   };
 
@@ -769,49 +768,93 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. CONFIG: WAKTU SOAL & PENGACAKAN */}
-              <div className="w-full bg-white/90 backdrop-blur-md p-4 border-4 border-sky-400 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
-                {/* Waktu Per Soal Settings */}
-                <div className="flex items-center gap-2">
-                  <span className="font-pixel text-xs text-sky-950 flex items-center gap-1.5 font-bold">
-                    <Clock className="w-3.5 h-3.5 text-sky-600" />
-                    BATAS WAKTU SOAL:
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {[15, 20, 30].map((sec) => (
-                      <button
-                        key={sec}
-                        onClick={() => {
-                          sound.playSelect();
-                          setTimeLimit(sec);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl font-pixel text-[10px] border-2 transition-all cursor-pointer ${
-                          timeLimit === sec
-                            ? 'bg-amber-400 text-slate-950 border-amber-500 font-bold shadow-xs'
-                            : 'bg-white text-slate-700 border-sky-200 hover:bg-sky-50'
-                        }`}
-                      >
-                        {sec}s
-                      </button>
-                    ))}
+              {/* 3. CONFIG: WAKTU SOAL, ACAK SOAL & PILIHAN GANDA */}
+              <div className="w-full bg-white/90 backdrop-blur-md p-4 border-4 border-sky-400 rounded-2xl shadow-lg flex flex-col gap-3">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                  {/* Waktu Per Soal Settings */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-pixel text-xs text-sky-950 flex items-center gap-1.5 font-bold">
+                      <Clock className="w-3.5 h-3.5 text-sky-600" />
+                      BATAS WAKTU:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {[15, 20, 30].map((sec) => (
+                        <button
+                          key={sec}
+                          onClick={() => {
+                            sound.playSelect();
+                            setTimeLimit(sec);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl font-pixel text-[10px] border-2 transition-all cursor-pointer ${
+                            timeLimit === sec
+                              ? 'bg-amber-400 text-slate-950 border-amber-500 font-bold shadow-xs'
+                              : 'bg-white text-slate-700 border-sky-200 hover:bg-sky-50'
+                          }`}
+                        >
+                          {sec}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Shuffle Controls Group */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Shuffle Questions Toggle */}
+                    <button
+                      onClick={() => {
+                        sound.playSelect();
+                        setShuffleQuestions(!shuffleQuestions);
+                      }}
+                      title="Mengacak urutan 15 soal secara dinamis"
+                      className={`px-3 py-1.5 rounded-xl border-2 font-pixel text-[10px] flex items-center gap-1.5 cursor-pointer transition-all ${
+                        shuffleQuestions
+                          ? 'bg-sky-500 text-white border-sky-600 font-bold shadow-xs'
+                          : 'bg-white text-slate-600 border-sky-200 hover:bg-sky-50'
+                      }`}
+                    >
+                      <Shuffle className="w-3.5 h-3.5" />
+                      <span>SOAL: {shuffleQuestions ? 'TERACAK ✓' : 'BERURUTAN'}</span>
+                    </button>
+
+                    {/* Shuffle Multiple Choice Options & Correct Key Toggle */}
+                    <button
+                      onClick={() => {
+                        sound.playSelect();
+                        setShuffleOptions(!shuffleOptions);
+                      }}
+                      title="Mengacak posisi pilihan ganda (A, B, C, D) dan kunci jawaban yang benarnya"
+                      className={`px-3 py-1.5 rounded-xl border-2 font-pixel text-[10px] flex items-center gap-1.5 cursor-pointer transition-all ${
+                        shuffleOptions
+                          ? 'bg-emerald-600 text-white border-emerald-700 font-bold shadow-xs'
+                          : 'bg-white text-slate-600 border-sky-200 hover:bg-sky-50'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>OPSI A/B/C/D: {shuffleOptions ? 'TERACAK ✓' : 'ASLI'}</span>
+                    </button>
+
+                    {/* Re-roll / Shuffle Again Button */}
+                    <button
+                      onClick={() => {
+                        sound.playSelect();
+                        setShuffleSeed((prev) => prev + 1);
+                      }}
+                      title="Kocok ulang urutan soal dan pilihan ganda sekarang juga"
+                      className="px-3 py-1.5 rounded-xl border-2 border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-900 font-pixel text-[10px] flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 font-bold shadow-2xs"
+                    >
+                      <span>🎲</span>
+                      <span>KOCOK ULANG</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Shuffle Questions Toggle */}
-                <button
-                  onClick={() => {
-                    sound.playSelect();
-                    setShuffleQuestions(!shuffleQuestions);
-                  }}
-                  className={`px-3.5 py-1.5 rounded-xl border-2 font-pixel text-[10px] flex items-center gap-1.5 cursor-pointer transition-all ${
-                    shuffleQuestions
-                      ? 'bg-sky-500 text-white border-sky-600 font-bold shadow-xs'
-                      : 'bg-white text-slate-600 border-sky-200 hover:bg-sky-50'
-                  }`}
-                >
-                  <Shuffle className="w-3.5 h-3.5" />
-                  {shuffleQuestions ? 'ACAK SOAL: AKTIF' : 'ACAK SOAL: NON-AKTIF'}
-                </button>
+                {/* Helpful note */}
+                <div className="text-[11px] font-sans-clean text-sky-800 flex items-center gap-1.5 bg-sky-50/80 px-3 py-1.5 rounded-xl border border-sky-200">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>
+                    <strong>Mode Acak Aktif:</strong> Urutan soal dan posisi pilihan ganda yang benar (A, B, C, atau D) diacak secara otomatis dan merata tiap sesi kuis.
+                  </span>
+                </div>
               </div>
 
               {/* 4. SELECT REGION MATERI (Region 1 - 4) */}
